@@ -30,13 +30,28 @@ jobs:
       - name: Load Docker image
         run: docker load -i cloudnova-image.tar
 
-      - name: Deploy
+      - name: Deploy application
         run: |
           docker stop cloudnova || true
           docker rm cloudnova || true
-          docker run -d --name cloudnova -p 8080:80 cloudnova-site:${{ github.event.workflow_run.head_sha }}
+          docker run -d \
+            --name cloudnova \
+            -p 8080:80 \
+            cloudnova-site:${{ github.event.workflow_run.head_sha }}
 
-      - name: Smoke test
+      - name: Check container is running
         run: |
-          sleep 2
-          curl -fsS http://localhost:8080
+          docker ps \
+            --filter "name=cloudnova" \
+            --filter "status=running" \
+            | grep cloudnova
+
+      - name: HTTP status code check
+        run: |
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080)
+          echo "HTTP status code: $STATUS"
+          test "$STATUS" -eq 200
+
+      - name: HTML title content check
+        run: |
+          curl -fsS http://localhost:8080 | grep -qi "<title>.*CloudNova.*</title>"
