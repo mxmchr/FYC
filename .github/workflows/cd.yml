@@ -5,29 +5,36 @@ on:
     workflows: ["CloudNova CI"]
     types: [completed]
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   deploy:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
 
     steps:
-      - name: Download Docker image artifact
+      - name: Download Docker image artifact from CI run
         uses: actions/download-artifact@v4
         with:
           name: cloudnova-docker-image
+          path: .
           run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify artifact file
+        run: ls -la
 
       - name: Load Docker image
         run: docker load -i cloudnova-image.tar
 
-      - name: Deploy (single target)
+      - name: Deploy
         run: |
           docker stop cloudnova || true
           docker rm cloudnova || true
-          docker run -d \
-            --name cloudnova \
-            -p 8080:80 \
-            cloudnova-site:${{ github.event.workflow_run.head_sha }}
+          docker run -d --name cloudnova -p 8080:80 cloudnova-site:${{ github.event.workflow_run.head_sha }}
 
       - name: Smoke test
         run: |
