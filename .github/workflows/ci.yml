@@ -1,0 +1,31 @@
+name: CloudNova CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  APP_NAME: CloudNova
+  IMAGE_NAME: cloudnova-site
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: test -f index.html
+      - run: grep -q "<title>" index.html
+
+  build:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t cloudnova-site:${{ github.sha }} .
+      - run: docker save cloudnova-site:${{ github.sha }} -o cloudnova-image.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cloudnova-docker-image
+          path: cloudnova-image.tar
