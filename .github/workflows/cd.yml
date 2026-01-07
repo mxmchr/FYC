@@ -3,54 +3,33 @@ name: CloudNova CD
 on:
   workflow_run:
     workflows: ["CloudNova CI"]
-    types:
-      - completed
+    types: [completed]
 
 jobs:
-  deploy-staging:
+  deploy:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Download Docker image artifact
         uses: actions/download-artifact@v4
         with:
           name: cloudnova-docker-image
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Load Docker image
         run: docker load -i cloudnova-image.tar
 
-      - name: Deploy staging
+      - name: Deploy (single target)
         run: |
-          docker stop cloudnova-staging || true
-          docker rm cloudnova-staging || true
-          docker run -d --name cloudnova-staging -p 8081:80 cloudnova-site:${{ github.event.workflow_run.head_sha }}
+          docker stop cloudnova || true
+          docker rm cloudnova || true
+          docker run -d \
+            --name cloudnova \
+            -p 8080:80 \
+            cloudnova-site:${{ github.event.workflow_run.head_sha }}
 
-      - name: Smoke test staging
-        run: |
-          sleep 2
-          curl -fsS http://localhost:8081
-
-  deploy-prod:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cloudnova-docker-image
-
-      - name: Load Docker image
-        run: docker load -i cloudnova-image.tar
-
-      - name: Deploy production
-        run: |
-          docker stop cloudnova-prod || true
-          docker rm cloudnova-prod || true
-          docker run -d --name cloudnova-prod -p 8080:80 cloudnova-site:${{ github.event.workflow_run.head_sha }}
-
-      - name: Smoke test production
+      - name: Smoke test
         run: |
           sleep 2
           curl -fsS http://localhost:8080
