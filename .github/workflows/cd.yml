@@ -1,12 +1,17 @@
-name: CloudNova CD
+name: Cloudnova CD
 
 on:
   workflow_run:
     workflows: ["CloudNova CI"]
     types: [completed]
 
+env:
+  IMAGE_TAG: cloudnova-site:${{ github.event.workflow_run.head_sha }}
+  STAGING_NAME: cloudnova-staging
+  PROD_NAME: cloudnova-prod
+
 jobs:
-  deploy:
+  deploy_staging:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
 
@@ -20,39 +25,60 @@ jobs:
           repository: ${{ github.repository }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify artifact file
-        run: ls -la
-
       - name: Load Docker image
         run: docker load -i cloudnova-image.tar
 
-      - name: Deploy application
+      - name: Deploy STAGING (8081)
         run: |
-          docker stop cloudnova || true
-          docker rm cloudnova || true
-          docker run -d \
-            --name cloudnova \
-            -p 8080:80 \
-            cloudnova-site:${{ github.event.workflow_run.head_sha }}
+          docker rm -f ${STAGING_NAME} || true
+          docker run -d             --name ${STAGING_NAME}             -p 8081:80             ${IMAGE_TAG}
 
-  check:
-    needs: deploy
+  check_staging:
+    needs: deploy_staging
     runs-on: self-hosted
 
     steps:
-      - name: Check container is running
-        run: |
-          docker ps \
-            --filter "name=cloudnova" \
-            --filter "status=running" \
-            | grep cloudnova
+      - name: Check container running (STAGING)
+        run: docker ps --filter "name=${STAGING_NAME}" --filter "status=running" | grep ${STAGING_NAME}
 
-      - name: HTTP status code check
+      - name: HTTP 200 check (STAGING)
         run: |
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080)
-          echo "HTTP status code: $STATUS"
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8081)
           test "$STATUS" -eq 200
 
-      - name: HTML title content check
+      - name: HTML title check (STAGING)
+        run: curl -fsS http://localhost:8081 | grep -qi "<title>.*CloudNova.*</title>"
+
+  deploy_prod:
+    needs: check_staging
+    runs-on: self-hosted
+
+    steps:
+      - name: Deploy PROD (8080)
         run: |
-          curl -fsS http://localhost:8080 | grep -qi "<title>.*CloudNova.*</title>"
+          docker rm -f ${PROD_NAME} || true
+          docker run -d             --name ${PROD_NAME}             -p 8080:80             ${IMAGE_TAG}
+
+  check_prod:
+    needs: deploy_prod
+    runs-on: self-hosted
+
+    steps:
+      - name: Check container running (PROD)
+        run: docker ps --filter "name=${PROD_NAME}" --filter "status=running" | grep ${PROD_NAME}
+
+      - name: HTTP 200 check (PROD)
+        run: |
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080)
+          test "$STATUS" -eq 200
+
+      - name: HTML title check (PROD)
+        run: curl -fsS http://localhost:8080 | grep -qi "<title>.*CloudNova.*</title>"
+
+  cleanup_staging:
+    needs: check_prod
+    runs-on: self-hosted
+
+    steps:
+      - name: Cleanup STAGING
+        run: docker rm -f ${STAGING_NAME} || true
