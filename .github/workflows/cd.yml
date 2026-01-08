@@ -1,4 +1,4 @@
-name: CloudNova CD (Staging -> Prod)
+name: CloudNova CD
 
 on:
   workflow_run:
