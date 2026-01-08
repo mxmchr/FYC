@@ -1,4 +1,4 @@
-name: Cloudnova CD
+name: CloudNova CD (Staging -> Prod)
 
 on:
   workflow_run:
@@ -30,8 +30,8 @@ jobs:
 
       - name: Deploy STAGING (8081)
         run: |
-          docker rm -f ${STAGING_NAME} || true
-          docker run -d             --name ${STAGING_NAME}             -p 8081:80             ${IMAGE_TAG}
+          docker rm -f "${STAGING_NAME}" || true
+          docker run -d --name "${STAGING_NAME}" -p 8081:80 "${IMAGE_TAG}"
 
   check_staging:
     needs: deploy_staging
@@ -39,7 +39,8 @@ jobs:
 
     steps:
       - name: Check container running (STAGING)
-        run: docker ps --filter "name=${STAGING_NAME}" --filter "status=running" | grep ${STAGING_NAME}
+        run: |
+          docker ps --filter "name=${STAGING_NAME}" --filter "status=running" | grep "${STAGING_NAME}"
 
       - name: HTTP 200 check (STAGING)
         run: |
@@ -47,7 +48,8 @@ jobs:
           test "$STATUS" -eq 200
 
       - name: HTML title check (STAGING)
-        run: curl -fsS http://localhost:8081 | grep -qi "<title>.*CloudNova.*</title>"
+        run: |
+          curl -fsS http://localhost:8081 | grep -qi "<title>.*CloudNova.*</title>"
 
   deploy_prod:
     needs: check_staging
@@ -56,8 +58,11 @@ jobs:
     steps:
       - name: Deploy PROD (8080)
         run: |
-          docker rm -f ${PROD_NAME} || true
-          docker run -d             --name ${PROD_NAME}             -p 8080:80             ${IMAGE_TAG}
+          # Libère le port 8080 si un ancien conteneur (pipeline classique) existe encore
+          docker rm -f cloudnova || true
+
+          docker rm -f "${PROD_NAME}" || true
+          docker run -d --name "${PROD_NAME}" -p 8080:80 "${IMAGE_TAG}"
 
   check_prod:
     needs: deploy_prod
@@ -65,7 +70,8 @@ jobs:
 
     steps:
       - name: Check container running (PROD)
-        run: docker ps --filter "name=${PROD_NAME}" --filter "status=running" | grep ${PROD_NAME}
+        run: |
+          docker ps --filter "name=${PROD_NAME}" --filter "status=running" | grep "${PROD_NAME}"
 
       - name: HTTP 200 check (PROD)
         run: |
@@ -73,7 +79,8 @@ jobs:
           test "$STATUS" -eq 200
 
       - name: HTML title check (PROD)
-        run: curl -fsS http://localhost:8080 | grep -qi "<title>.*CloudNova.*</title>"
+        run: |
+          curl -fsS http://localhost:8080 | grep -qi "<title>.*CloudNova.*</title>"
 
   cleanup_staging:
     needs: check_prod
@@ -81,4 +88,4 @@ jobs:
 
     steps:
       - name: Cleanup STAGING
-        run: docker rm -f ${STAGING_NAME} || true
+        run: docker rm -f "${STAGING_NAME}" || true
